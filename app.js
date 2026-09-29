@@ -1,4 +1,4 @@
- const firebaseConfig = {
+const firebaseConfig = {
     apiKey: "AIzaSyCvydbP_VIn6Om5CtrjGC69_XWS_NRgoYo",
     authDomain: "chat-app-55ac0.firebaseapp.com",
     databaseURL: "https://chat-app-55ac0-default-rtdb.firebaseio.com",
@@ -16,9 +16,8 @@ const CLOUDINARY_UPLOAD_PRESET = "ta3aj5hs";
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// State Variables
-let currentRoom = "default-room";
-let activeUploadsCount = parseInt(localStorage.getItem(`uploads_${currentRoom}`)) || 0;
+
+let currentRoom = sessionStorage.getItem("airshare_room") || "default-room";
 let allFeedItems = [];
 let currentFilter = "all";
 let isRemoteUpdate = false;
@@ -26,7 +25,7 @@ let isRemoteUpdate = false;
 // DOM Elements
 const roomInput = document.getElementById("roomInput");
 const joinRoomBtn = document.getElementById("joinRoomBtn");
-const currentRoomDisplay = document.getElementById("currentRoomDisplay");
+const mobileRoomDisplay = document.getElementById("mobileRoomDisplay"); 
 const sharedText = document.getElementById("sharedText");
 const clearTextBtn = document.getElementById("clearTextBtn");
 const copyTextBtn = document.getElementById("copyTextBtn");
@@ -39,8 +38,11 @@ const uploadStatusText = document.getElementById("uploadStatusText");
 const feedContainer = document.getElementById("feedContainer");
 const clearFeedBtn = document.getElementById("clearFeedBtn");
 const activeUploadsCountEl = document.getElementById("activeUploadsCount");
-activeUploadsCountEl.textContent = activeUploadsCount;
 const filterBtns = document.querySelectorAll(".filter-btn");
+
+// Set initial input value & room display on load
+roomInput.value = currentRoom;
+if (mobileRoomDisplay) mobileRoomDisplay.textContent = currentRoom;
 
 // Theme Toggle DOM Elements
 const themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -80,7 +82,6 @@ if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener("click", () => {
         sidebar.classList.toggle("mobile-open");
         
-        // Switch between hamburger bars and close cross icon
         if (sidebar.classList.contains("mobile-open")) {
             toggleIcon.classList.remove("fa-bars");
             toggleIcon.classList.add("fa-xmark");
@@ -90,7 +91,6 @@ if (mobileMenuToggle) {
         }
     });
 
-    // Close sidebar when clicking outside on mobile viewports
     document.addEventListener("click", (e) => {
         if (window.innerWidth <= 900) {
             if (!sidebar.contains(e.target) && !mobileMenuToggle.contains(e.target)) {
@@ -109,8 +109,6 @@ const closeSidebarBtn = document.getElementById("closeSidebarBtn");
 if (closeSidebarBtn) {
     closeSidebarBtn.addEventListener("click", () => {
         sidebar.classList.remove("mobile-open");
-        
-        const mobileMenuToggle = document.getElementById("mobileMenuToggle");
         if (mobileMenuToggle) {
             const toggleIcon = mobileMenuToggle.querySelector("i");
             if (toggleIcon) {
@@ -125,11 +123,12 @@ if (closeSidebarBtn) {
 function switchRoom(newRoom) {
     if (!newRoom.trim()) return;
     currentRoom = newRoom.trim().toLowerCase().replace(/\s+/g, '-');
-    if (currentRoomDisplay) currentRoomDisplay.textContent = currentRoom;
+    
+   
+    sessionStorage.setItem("airshare_room", currentRoom);
+    
+    if (mobileRoomDisplay) mobileRoomDisplay.textContent = currentRoom;
     roomInput.value = currentRoom;
-
-    activeUploadsCount = parseInt(localStorage.getItem(`uploads_${currentRoom}`)) || 0;
-    activeUploadsCountEl.textContent = activeUploadsCount;
 
     if (sidebar) {
         sidebar.classList.remove("mobile-open");
@@ -178,7 +177,10 @@ function attachFirebaseListeners() {
         allFeedItems = Object.keys(data).map(key => ({
             id: key,
             ...data[key]
-        })).reverse(); // Newest first
+        })).reverse(); 
+
+        const totalCount = allFeedItems.length;
+        activeUploadsCountEl.textContent = totalCount;
 
         renderFeed();
     });
@@ -196,7 +198,7 @@ sharedText.addEventListener("input", () => {
         textRef.set(sharedText.value).then(() => {
             textSyncStatus.innerHTML = '<i class="fa-solid fa-circle-check"></i> Synced';
         });
-    }, 300); // Debounce to prevent flooding
+    }, 300);
 });
 
 clearTextBtn.addEventListener("click", () => {
@@ -211,11 +213,7 @@ clearFeedBtn.addEventListener("click", () => {
     }
     
     if (confirm("Are you sure you want to clear all shared items in this room?")) {
-        db.ref(`rooms/${currentRoom}/files`).remove().then(() => {
-            activeUploadsCount = 0;
-            activeUploadsCountEl.textContent = activeUploadsCount;
-            localStorage.removeItem(`uploads_${currentRoom}`);
-        }).catch((error) => {
+        db.ref(`rooms/${currentRoom}/files`).remove().catch((error) => {
             alert("Failed to clear feed: " + error.message);
         });
     }
@@ -292,7 +290,7 @@ async function handleFiles(files) {
     for (let i = 0; i < files.length; i++) {
         await uploadToCloudinary(files[i]);
     }
-    fileInput.value = ""; // Reset input
+    fileInput.value = "";
 }
 
 function uploadToCloudinary(file) {
@@ -330,9 +328,7 @@ function uploadToCloudinary(file) {
                     url: response.secure_url,
                     timestamp: Date.now()
                 });
-                activeUploadsCount++;
-                activeUploadsCountEl.textContent = activeUploadsCount;
-                localStorage.setItem(`uploads_${currentRoom}`, activeUploadsCount);
+                resolve();
             } else {
                 alert("Upload failed. Verify your Cloudinary Cloud Name and Unsigned Upload Preset.");
                 reject(xhr.statusText);
@@ -407,7 +403,7 @@ function renderFeed() {
     `).join("");
 }
 
-// utility helper
+// utility helpers
 function getFileCategory(mimeType) {
     if (!mimeType) return "file";
     if (mimeType.startsWith("image/")) return "image";
